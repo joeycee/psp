@@ -14,13 +14,15 @@ app.get("/", (req, res) => {
     <title>PSP Engineering Limited</title>
     <style>
       :root {
-        color-scheme: light;
-        --navy: #11345a;
-        --blue: #1f5f95;
-        --cream: #f7f4ee;
-        --ink: #1f2933;
-        --muted: #52606d;
-        --line: #d9e2ec;
+        color-scheme: dark;
+        --navy: #d6e6ff;
+        --blue: #6cb5ff;
+        --ink: #ecf3fb;
+        --muted: #a4b7cb;
+        --line: rgba(144, 185, 230, 0.2);
+        --panel: rgba(8, 17, 31, 0.88);
+        --panel-strong: rgba(12, 24, 43, 0.96);
+        --shadow: rgba(0, 0, 0, 0.42);
       }
 
       * {
@@ -32,8 +34,9 @@ app.get("/", (req, res) => {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         color: var(--ink);
         background:
-          radial-gradient(circle at top left, rgba(31, 95, 149, 0.16), transparent 28%),
-          linear-gradient(180deg, #ffffff 0%, var(--cream) 100%);
+          radial-gradient(circle at top left, rgba(68, 143, 220, 0.22), transparent 26%),
+          radial-gradient(circle at bottom right, rgba(19, 73, 140, 0.28), transparent 32%),
+          linear-gradient(180deg, #04070d 0%, #09111e 48%, #03060b 100%);
       }
 
       .wrap {
@@ -43,17 +46,17 @@ app.get("/", (req, res) => {
       }
 
       .card {
-        background: rgba(255, 255, 255, 0.94);
-        border: 1px solid rgba(17, 52, 90, 0.08);
+        background: rgba(7, 15, 27, 0.9);
+        border: 1px solid rgba(144, 185, 230, 0.14);
         border-radius: 24px;
-        box-shadow: 0 18px 45px rgba(17, 52, 90, 0.12);
+        box-shadow: 0 24px 60px var(--shadow);
         overflow: hidden;
       }
 
       .hero {
         padding: 36px 28px 24px;
         text-align: center;
-        background: linear-gradient(135deg, rgba(17, 52, 90, 0.05), rgba(31, 95, 149, 0.12));
+        background: linear-gradient(135deg, rgba(27, 56, 96, 0.5), rgba(9, 22, 40, 0.3));
       }
 
       .hero img {
@@ -85,7 +88,7 @@ app.get("/", (req, res) => {
         border: 1px solid var(--line);
         border-radius: 18px;
         padding: 22px 20px;
-        background: #fff;
+        background: var(--panel-strong);
       }
 
       h2 {
@@ -102,6 +105,10 @@ app.get("/", (req, res) => {
       .website-link {
         color: var(--blue);
         text-decoration: none;
+      }
+
+      .website-link:hover {
+        text-decoration: underline;
       }
 
       .note {
