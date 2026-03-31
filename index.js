@@ -127,7 +127,11 @@ app.post("/contact", async (req, res) => {
       });
 
       if (!verification.ok) {
-        debugEmailLog("[contact-form] reCAPTCHA verification failed");
+        debugEmailLog("[contact-form] reCAPTCHA verification failed", {
+          reason: verification.reason || "unknown",
+          score: verification.result?.score ?? null,
+          action: verification.result?.action || null,
+        });
         res.redirect(`${returnTo}?status=captcha_failed`);
         return;
       }
