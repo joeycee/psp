@@ -3,7 +3,7 @@ const { loadEnvFile } = require("./lib/loadEnv");
 
 loadEnvFile();
 
-const { isValidEmail, sendContactEmail, getRecaptchaConfig, verifyRecaptchaToken } = require("./lib/siteUtils");
+const { isValidEmail, sendContactEmail, getRecaptchaConfig, verifyRecaptchaToken, debugEmailLog } = require("./lib/siteUtils");
 const {
   services,
   renderHome,
@@ -69,7 +69,7 @@ app.post("/contact", async (req, res) => {
   const requestedReturnTo = String(req.body.returnTo || "/contact").trim();
   const returnTo = requestedReturnTo.startsWith("/") ? requestedReturnTo : "/contact";
 
-  console.log("[contact-form] Submission received", {
+  debugEmailLog("[contact-form] Submission received", {
     enquiryType,
     sourcePage,
     returnTo,
@@ -79,7 +79,7 @@ app.post("/contact", async (req, res) => {
   });
 
   if (honeypot) {
-    console.log("[contact-form] Honeypot triggered, treating submission as spam", {
+    debugEmailLog("[contact-form] Honeypot triggered, treating submission as spam", {
       sourcePage,
       email,
     });
@@ -88,7 +88,7 @@ app.post("/contact", async (req, res) => {
   }
 
   if (formStartedAt && Date.now() - formStartedAt < 1500) {
-    console.log("[contact-form] Submission arrived too quickly, treating as suspicious", {
+    debugEmailLog("[contact-form] Submission arrived too quickly, treating as suspicious", {
       sourcePage,
       email,
       formAgeMs: Date.now() - formStartedAt,
@@ -98,7 +98,7 @@ app.post("/contact", async (req, res) => {
   }
 
   if (!name || !email || !message) {
-    console.log("[contact-form] Missing required fields", {
+    debugEmailLog("[contact-form] Missing required fields", {
       hasName: Boolean(name),
       hasEmail: Boolean(email),
       hasMessage: Boolean(message),
@@ -108,14 +108,14 @@ app.post("/contact", async (req, res) => {
   }
 
   if (!isValidEmail(email)) {
-    console.log("[contact-form] Invalid email submitted", { email });
+    debugEmailLog("[contact-form] Invalid email submitted", { email });
     res.redirect(`${returnTo}?status=invalid_email`);
     return;
   }
 
   if (recaptchaConfig.enabled) {
     if (!recaptchaToken) {
-      console.log("[contact-form] Missing reCAPTCHA token");
+      debugEmailLog("[contact-form] Missing reCAPTCHA token");
       res.redirect(`${returnTo}?status=captcha_required`);
       return;
     }
@@ -127,7 +127,7 @@ app.post("/contact", async (req, res) => {
       });
 
       if (!verification.ok) {
-        console.log("[contact-form] reCAPTCHA verification failed");
+        debugEmailLog("[contact-form] reCAPTCHA verification failed");
         res.redirect(`${returnTo}?status=captcha_failed`);
         return;
       }
@@ -149,14 +149,14 @@ app.post("/contact", async (req, res) => {
     });
 
     if (!result.ok) {
-      console.log("[contact-form] Email send returned non-success status", {
+      debugEmailLog("[contact-form] Email send returned non-success status", {
         reason: result.reason,
       });
       res.redirect(`${returnTo}?status=${result.reason}`);
       return;
     }
 
-    console.log("[contact-form] Email send completed successfully", { email, sourcePage });
+    debugEmailLog("[contact-form] Email send completed successfully", { email, sourcePage });
     res.redirect(`${returnTo}?status=success`);
   } catch (error) {
     console.error("Contact form send failed", error);
