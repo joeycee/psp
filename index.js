@@ -1,191 +1,173 @@
 const express = require("express");
+const { loadEnvFile } = require("./lib/loadEnv");
+
+loadEnvFile();
+
+const { isValidEmail, sendContactEmail, getRecaptchaConfig, verifyRecaptchaToken } = require("./lib/siteUtils");
+const {
+  services,
+  renderHome,
+  renderServicesPage,
+  renderServiceDetail,
+  renderProductsPage,
+  renderSurfkitPage,
+  renderVisionTrapPage,
+  renderVisionTrapInstallationPage,
+  renderVisionTrapStockistsPage,
+  renderAboutPage,
+  renderReviewsPage,
+  renderContactPage,
+  renderNotFound,
+} = require("./lib/siteRenderer");
 
 const app = express();
 const port = process.env.PORT || 3000;
+const recaptchaConfig = getRecaptchaConfig();
 
 app.use(express.static(__dirname));
+app.use(express.urlencoded({ extended: true }));
 
-app.get("/", (req, res) => {
-  res.type("html").send(`<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PSP Engineering Limited</title>
-    <style>
-      :root {
-        color-scheme: dark;
-        --navy: #d6e6ff;
-        --blue: #6cb5ff;
-        --ink: #ecf3fb;
-        --muted: #a4b7cb;
-        --line: rgba(144, 185, 230, 0.2);
-        --panel: rgba(8, 17, 31, 0.88);
-        --panel-strong: rgba(12, 24, 43, 0.96);
-        --shadow: rgba(0, 0, 0, 0.42);
+app.get("/", (req, res) => res.type("html").send(renderHome()));
+app.get("/services", (req, res) => res.type("html").send(renderServicesPage()));
+app.get("/services/:slug", (req, res) => {
+  const service = services.find((item) => item.slug === req.params.slug);
+  if (!service) {
+    res.status(404).type("html").send(renderNotFound());
+    return;
+  }
+
+  res.type("html").send(renderServiceDetail(service));
+});
+
+app.get("/products", (req, res) => res.type("html").send(renderProductsPage()));
+app.get("/products/surfkit", (req, res) => {
+  res.type("html").send(renderSurfkitPage(req.query.status, { recaptchaSiteKey: recaptchaConfig.siteKey }));
+});
+app.get("/products/vision-trap", (req, res) => res.type("html").send(renderVisionTrapPage()));
+app.get("/products/vision-trap/installation", (req, res) => {
+  res.type("html").send(renderVisionTrapInstallationPage());
+});
+app.get("/products/vision-trap/stockists", (req, res) => {
+  res.type("html").send(renderVisionTrapStockistsPage());
+});
+app.get("/about", (req, res) => res.type("html").send(renderAboutPage()));
+app.get("/reviews", (req, res) => res.type("html").send(renderReviewsPage()));
+app.get("/contact", (req, res) => {
+  res.type("html").send(renderContactPage(req.query.status, { recaptchaSiteKey: recaptchaConfig.siteKey }));
+});
+
+app.post("/contact", async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const companyName = String(req.body.companyName || "").trim();
+  const email = String(req.body.email || "").trim();
+  const message = String(req.body.message || "").trim();
+  const honeypot = String(req.body.faxNumber || "").trim();
+  const formStartedAt = Number(req.body.formStartedAt || 0);
+  const recaptchaToken = String(req.body["g-recaptcha-response"] || "").trim();
+  const enquiryType = String(req.body.enquiryType || "General website enquiry").trim();
+  const sourcePage = String(req.body.sourcePage || "/contact").trim();
+  const requestedReturnTo = String(req.body.returnTo || "/contact").trim();
+  const returnTo = requestedReturnTo.startsWith("/") ? requestedReturnTo : "/contact";
+
+  console.log("[contact-form] Submission received", {
+    enquiryType,
+    sourcePage,
+    returnTo,
+    email,
+    hasCompanyName: Boolean(companyName),
+    formAgeMs: formStartedAt ? Date.now() - formStartedAt : null,
+  });
+
+  if (honeypot) {
+    console.log("[contact-form] Honeypot triggered, treating submission as spam", {
+      sourcePage,
+      email,
+    });
+    res.redirect(`${returnTo}?status=success`);
+    return;
+  }
+
+  if (formStartedAt && Date.now() - formStartedAt < 1500) {
+    console.log("[contact-form] Submission arrived too quickly, treating as suspicious", {
+      sourcePage,
+      email,
+      formAgeMs: Date.now() - formStartedAt,
+    });
+    res.redirect(`${returnTo}?status=success`);
+    return;
+  }
+
+  if (!name || !email || !message) {
+    console.log("[contact-form] Missing required fields", {
+      hasName: Boolean(name),
+      hasEmail: Boolean(email),
+      hasMessage: Boolean(message),
+    });
+    res.redirect(`${returnTo}?status=missing`);
+    return;
+  }
+
+  if (!isValidEmail(email)) {
+    console.log("[contact-form] Invalid email submitted", { email });
+    res.redirect(`${returnTo}?status=invalid_email`);
+    return;
+  }
+
+  if (recaptchaConfig.enabled) {
+    if (!recaptchaToken) {
+      console.log("[contact-form] Missing reCAPTCHA token");
+      res.redirect(`${returnTo}?status=captcha_required`);
+      return;
+    }
+
+    try {
+      const verification = await verifyRecaptchaToken({
+        token: recaptchaToken,
+        remoteIp: req.ip,
+      });
+
+      if (!verification.ok) {
+        console.log("[contact-form] reCAPTCHA verification failed");
+        res.redirect(`${returnTo}?status=captcha_failed`);
+        return;
       }
+    } catch (error) {
+      console.error("reCAPTCHA verification failed", error);
+      res.redirect(`${returnTo}?status=captcha_failed`);
+      return;
+    }
+  }
 
-      * {
-        box-sizing: border-box;
-      }
+  try {
+    const result = await sendContactEmail({
+      name,
+      companyName,
+      email,
+      message,
+      enquiryType,
+      sourcePage,
+    });
 
-      body {
-        margin: 0;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        color: var(--ink);
-        background:
-          radial-gradient(circle at top left, rgba(68, 143, 220, 0.22), transparent 26%),
-          radial-gradient(circle at bottom right, rgba(19, 73, 140, 0.28), transparent 32%),
-          linear-gradient(180deg, #04070d 0%, #09111e 48%, #03060b 100%);
-      }
+    if (!result.ok) {
+      console.log("[contact-form] Email send returned non-success status", {
+        reason: result.reason,
+      });
+      res.redirect(`${returnTo}?status=${result.reason}`);
+      return;
+    }
 
-      .wrap {
-        max-width: 860px;
-        margin: 0 auto;
-        padding: 40px 20px 56px;
-      }
+    console.log("[contact-form] Email send completed successfully", { email, sourcePage });
+    res.redirect(`${returnTo}?status=success`);
+  } catch (error) {
+    console.error("Contact form send failed", error);
+    res.redirect(`${returnTo}?status=failed`);
+  }
+});
 
-      .card {
-        background: rgba(7, 15, 27, 0.9);
-        border: 1px solid rgba(144, 185, 230, 0.14);
-        border-radius: 24px;
-        box-shadow: 0 24px 60px var(--shadow);
-        overflow: hidden;
-      }
-
-      .hero {
-        padding: 36px 28px 24px;
-        text-align: center;
-        background: linear-gradient(135deg, rgba(27, 56, 96, 0.5), rgba(9, 22, 40, 0.3));
-      }
-
-      .hero img {
-        width: min(221px, 100%);
-        height: auto;
-      }
-
-      h1 {
-        margin: 20px 0 10px;
-        font-size: clamp(2rem, 5vw, 3rem);
-        line-height: 1.05;
-        color: var(--navy);
-      }
-
-      .hero p {
-        margin: 0 auto;
-        max-width: 540px;
-        color: var(--muted);
-        font-size: 1.05rem;
-      }
-
-      .content {
-        padding: 28px;
-        display: grid;
-        gap: 24px;
-      }
-
-      .panel {
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        padding: 22px 20px;
-        background: var(--panel-strong);
-      }
-
-      h2 {
-        margin: 0 0 14px;
-        font-size: 1.2rem;
-        color: var(--navy);
-      }
-
-      .contact-block {
-        white-space: pre-line;
-        line-height: 1.7;
-      }
-
-      .website-link {
-        color: var(--blue);
-        text-decoration: none;
-      }
-
-      .website-link:hover {
-        text-decoration: underline;
-      }
-
-      .note {
-        margin-top: 18px;
-        padding-top: 18px;
-        border-top: 1px solid var(--line);
-      }
-
-      @media (max-width: 640px) {
-        .wrap {
-          padding: 20px 14px 32px;
-        }
-
-        .hero,
-        .content {
-          padding-left: 18px;
-          padding-right: 18px;
-        }
-
-        .panel {
-          padding: 18px 16px;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="wrap">
-      <section class="card">
-        <header class="hero">
-          <img src="/logo.png" alt="PSP Engineering Limited logo" />
-          <h1>Website Maintenance</h1>
-          <p>Our new website is currently being prepared. Please use the contact details below in the meantime.</p>
-        </header>
-
-        <section class="content">
-          <div class="panel">
-            <h2>Contact</h2>
-            <div class="contact-block">PSP Engineering Limited
-Physical Address
-44 Carr Road
-Mount Roskill
-Auckland City
-Auckland 1041
-
-Postal Address
-P O Box 27085
-Mount Roskill
-Auckland City
-Auckland 1440
-
-Website: <a class="website-link" href="https://www.pspeng.co.nz">www.pspeng.co.nz</a>
-
-General Enquiries
-Tony Slimo, Managing Director
-Brent Airey, Senior Engineer
-
-Ph (09) 624-1004
-Fax (09) 624-2449
-
-Hours of Operation
-Mon - Fri 7:30am - 5:00pm</div>
-
-            <div class="contact-block note">International Enquiries
-PSP provides our full range of services internationally as well.
-
-To contact us from overseas:
-
-Ph +64 9 624 1004
-Fax +64 9 624 2449</div>
-          </div>
-        </section>
-      </section>
-    </main>
-  </body>
-</html>`);
+app.use((req, res) => {
+  res.status(404).type("html").send(renderNotFound());
 });
 
 app.listen(port, () => {
-  console.log("PSP placeholder site running on port " + port);
+  console.log(`PSP Engineering site listening on port ${port}`);
 });
